@@ -5,7 +5,26 @@
 
 namespace py = pybind11;
 
+namespace {
 
+template<bool trans_a, bool trans_b>
+struct MatMul {
+   static void compute(const float *A, const float *B, float *C,
+                      size_t m, size_t n, size_t k) {
+       for (size_t i = 0; i < m; i++) {
+           for (size_t j = 0; j < k; j++) {
+               C[i * k + j] = 0;
+               for (size_t l = 0; l < n; l++) {
+                   float a_val = trans_a ? A[l * m + i] : A[i * n + l];
+                   float b_val = trans_b ? B[j * n + l] : B[l * k + j];
+                   C[i * k + j] += a_val * b_val;
+               }
+           }
+       }
+   }
+};
+
+}
 void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
 								  float *theta, size_t m, size_t n, size_t k,
 								  float lr, size_t batch)
@@ -33,7 +52,48 @@ void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
      */
 
     /// BEGIN YOUR CODE
+   auto Z = std::make_unique<float[]>(batch * k);
+   auto exp_Z = std::make_unique<float[]>(batch * k);
+   auto grad = std::make_unique<float[]>(n * k);
+   auto softmax = std::make_unique<float[]>(batch * k);
 
+   for (size_t i = 0; i < m; i += batch) {
+       size_t current_batch = std::min(batch, m - i);
+
+       auto X_batch = X + i * n;
+
+       MatMul<false, false>::compute(X_batch, theta, Z.get(),
+                                   current_batch, n, k);
+
+       for(size_t b = 0; b < current_batch; b++) {
+           float sum = 0;
+           for (size_t j = 0; j < k; j++) {
+               exp_Z[b * k + j] = std::exp(Z[b * k + j]);
+               sum += exp_Z[b * k + j];
+           }
+
+           for (size_t j = 0; j < k; j++) {
+               softmax[b * k + j] = exp_Z[b * k + j] / sum;
+           }
+       }
+
+       for (size_t b = 0; b < current_batch; b++) {
+           for (size_t j = 0; j < k; j++) {
+               if (j == y[i + b]) {
+                   softmax[b * k + j] -= 1.0f;
+               }
+           }
+       }
+
+       MatMul<true, false>::compute(X_batch, softmax.get(), grad.get(),
+                                  n, current_batch, k);
+
+       for (size_t l = 0; l < n; l++) {
+           for (size_t j = 0; j < k; j++) {
+               theta[l * k + j] -= lr * grad[l * k + j] / current_batch;
+           }
+       }
+    }
     /// END YOUR CODE
 }
 

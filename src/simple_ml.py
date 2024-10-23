@@ -20,7 +20,7 @@ def add(x, y):
         Sum of x + y
     """
     ### BEGIN YOUR CODE
-    pass
+    return x + y
     ### END YOUR CODE
 
 
@@ -48,7 +48,15 @@ def parse_mnist(image_filename, label_filename):
                 for MNIST will contain the values 0-9.
     """
     ### BEGIN YOUR CODE
-    pass
+    with gzip.open(image_filename, 'rb') as img_file, gzip.open(label_filename, 'rb') as lbl_file:
+        magic, num_images, rows, cols = struct.unpack(">IIII", img_file.read(16))
+        X = np.frombuffer(img_file.read(), dtype=np.uint8).reshape(num_images, rows*cols)
+        X = X.astype(np.float32) / 255.0
+
+        magic, num_labels = struct.unpack(">II", lbl_file.read(8))
+        y = np.frombuffer(lbl_file.read(), dtype=np.uint8)
+
+    return X, y
     ### END YOUR CODE
 
 
@@ -68,7 +76,11 @@ def softmax_loss(Z, y):
         Average softmax loss over the sample.
     """
     ### BEGIN YOUR CODE
-    pass
+    batch_size = Z.shape[0]
+    y_logits = Z[np.arange(batch_size), y]
+    losses = np.log(np.sum(np.exp(Z), axis=1)) - y_logits
+
+    return np.mean(losses)
     ### END YOUR CODE
 
 
@@ -91,7 +103,26 @@ def softmax_regression_epoch(X, y, theta, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
+    num_examples = X.shape[0]
+    for i in range(0, num_examples, batch):
+        batch_end = min(i + batch, num_examples)
+        X_batch = X[i:batch_end]
+        y_batch = y[i:batch_end]
+        current_batch_size = X_batch.shape[0]
+
+        Z = X_batch @ theta
+
+        exp_Z = np.exp(Z)
+        softmax = exp_Z / np.sum(exp_Z, axis=1, keepdims=True)
+
+        y_one_hot = np.zeros_like(softmax)
+        y_one_hot[np.arange(current_batch_size), y_batch] = 1
+
+        grad = (1 / current_batch_size) * X_batch.T @ (softmax - y_one_hot)
+        theta -= lr * grad
+
+    return theta
+
     ### END YOUR CODE
 
 
@@ -118,7 +149,30 @@ def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
+    num_examples = X.shape[0]
+    for i in range(0, num_examples, batch):
+        batch_end = min(i + batch, num_examples)
+        X_batch = X[i:batch_end]
+        y_batch = y[i:batch_end]
+        current_batch_size = X_batch.shape[0]
+
+        Z1 = X_batch @ W1
+        H1 = np.maximum(Z1, 0)
+        Z2 = H1 @ W2
+
+        exp_Z2 = np.exp(Z2)
+        softmax = exp_Z2 / np.sum(exp_Z2, axis=1, keepdims=True)
+        y_one_hot = np.zeros_like(softmax)
+        y_one_hot[np.arange(current_batch_size), y_batch] = 1
+
+        grad_Z2 = softmax - y_one_hot  # dL/dZ2
+        grad_W2 = (1 / current_batch_size) * H1.T @ grad_Z2
+        grad_H1 = grad_Z2 @ W2.T  # dL/dH1
+        grad_Z1 = grad_H1 * (Z1 > 0)  # dL/dZ1
+        grad_W1 = (1 / current_batch_size) * X_batch.T @ grad_Z1
+
+        W1 -= lr * grad_W1
+        W2 -= lr * grad_W2
     ### END YOUR CODE
 
 
